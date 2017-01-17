@@ -22,7 +22,7 @@ object App {
   val _appName: String = "XML"
 
   val _defaultDuracao      : Int    = 10
-  val _defaultPorta        : Int    = 10010
+  val _defaultPorta        : Int    = 10011
   val _defaultHost         : String = "127.0.0.1"
   val _defaultTableName    : String = "arquivo"
   val _defaultColumnFamily : String = "dado"
@@ -53,8 +53,8 @@ object App {
   //  var userName: String = _defaultUserName
   //  var passwd: String = _defaultPasswd
 
-  var hadoopUserName: String = _defaultHadoopUserName
-  var hadoopPath: String     = _defaultHadoopPath
+//  var hadoopUserName: String = _defaultHadoopUserName
+//  var hadoopPath: String     = _defaultHadoopPath
 
   val formatDate = new SimpleDateFormat("yyyyMMdd")
 
@@ -73,9 +73,9 @@ object App {
 //
 ////    val in = new FileInputStream("/home/hideki/Documentos/Projetos/projeto_tivit/data_examples/xml_arquivo_original.txt")
 //
-//    var sw: StringWriter = new StringWriter()
+//    val sw: StringWriter = new StringWriter()
 //
-//    val file = Source.fromFile("/home/hideki/Documentos/Projetos/projeto_tivit/data_examples/xml_arquivo_original.txt").getLines.toList
+//    val file = Source.fromFile("/home/hideki/Documents/projeto_tivit/data_examples/xml_arquivo_original.txt").getLines.toList
 //
 //    val m = getMultiplas(file)
 //
@@ -102,7 +102,7 @@ object App {
 
     val flumeStream = FlumeUtils.createPollingStream(ssc, hostname, porta)
 
-    flumeStream.count().map(c =>
+    flumeStream.count.map(c =>
       "Recebidos: " + c + "\n" +
         "Arquivos: " + arqProcessado
     ).print
@@ -150,7 +150,10 @@ object App {
       val dateFormat = new SimpleDateFormat("yyyy-mm-dd;hh:mm:ss")
       Logger.getLogger(getClass.getName).log(Level.INFO, arqProcessado + ";" + dateFormat.format(new Date()))
 
-      file.clear()
+      setFile(file.toList)
+
+      fileName = ""
+      file.clear
 
     }
 
@@ -183,50 +186,55 @@ object App {
 // HBase
   def setFile(file: List[String]): Unit = {
 
-    val m = getMultiplas(file)
-
-    val sw: StringWriter = new StringWriter()
-
-    jaxbMarshaller.marshal(m, sw)
-
-    val connection = ConnectionFactory.createConnection(config)
-
-    val table = connection.getTable(TableName.valueOf(tableName))
-
     try {
 
-      val p = new Put(Bytes.toBytes(formatDate.format(m.getDataGeracaoArq) + "|" + fileName + extension))
+      val m = getMultiplas(file)
 
-      p.addColumn(
-        Bytes.toBytes(columnFamily),
-        Bytes.toBytes(columnName),
-        Bytes.toBytes(sw.toString)
-      )
+      val sw: StringWriter = new StringWriter()
 
-      table.put(p)
+      jaxbMarshaller.marshal(m, sw)
+//
+      val connection = ConnectionFactory.createConnection(config)
 
-    } finally {
-      table.close()
-      connection.close()
+      val table = connection.getTable(TableName.valueOf(tableName))
+
+      try {
+
+      val nome = formatDate.format(new Date()) + "|" + fileName + extension
+
+
+        val p = new Put(Bytes.toBytes(nome))
+
+        p.addColumn(
+          Bytes.toBytes(columnFamily),
+          Bytes.toBytes(columnName),
+          Bytes.toBytes(sw.toString)
+        )
+
+        table.put(p)
+
+      } catch {
+        case e : Exception => e.printStackTrace()
+      } finally {
+        table.close()
+        connection.close()
+      }
+    } catch {
+      case e : Exception =>
+        println("\n\n\nArquivo: " + fileName + "\n" +
+          "Erro: " + e.toString + "\n\n\n")
     }
   }
 
-  def getXMLGregorianCalendar(year: String, month: String, day: String): Option[XMLGregorianCalendar] = {
+  def getXMLCalendar(year: String, month: String, day: String): XMLGregorianCalendar = {
 
-    try{
+    val date = new GregorianCalendar(
+      year.toInt,
+      month.toInt,
+      day.toInt)
 
-      val date = new GregorianCalendar(
-        year.toInt,
-        month.toInt,
-        day.toInt)
+    DatatypeFactory.newInstance().newXMLGregorianCalendar(date)
 
-      Option(DatatypeFactory.newInstance().newXMLGregorianCalendar(date))
-
-    } catch {
-      case e: Exception =>
-        e.printStackTrace()
-        None
-    }
   }
 
   def getCodigoProduto(value: String): Int = {
@@ -306,11 +314,12 @@ object App {
     multiplas.setHoraGeracaoArq(slice(header, 86, 94))
 
     multiplas.setDataGeracaoArq(
-      getXMLGregorianCalendar(
+      getXMLCalendar(
         year = slice(header, 78, 82),
         month = slice(header, 82, 84),
         day = slice(header, 84, 86)
-        ).orNull)
+      )
+    )
 
     multiplas.setNumeroAgencia("0")
     multiplas.setStatus(0)
@@ -361,6 +370,7 @@ object App {
     listaLotes.add(lote)
 
     for(i <- 1 to file.length - 2) {
+
       var transacao = file.lift(i).getOrElse("")
 
       ///////////////////
@@ -411,38 +421,34 @@ object App {
 
       pagamento.setNumDVCodBarras(getBarra(transacao))
       //            new BigDecimal(transacao.substring(194, 204))
-      pagamento.setNumeroValorDocumento(null)
-
-      pagamento.setNumeroValorTitulo(null)
-      //            new BigDecimal(transacao.substring(219, 234))
-      pagamento.setNumeroValorDesconto(null)
-
-      pagamento.setNumeroValorMulta(null)
+//      pagamento.setNumeroValorDocumento(null)
+//
+//      pagamento.setNumeroValorTitulo(null)
+//      //            new BigDecimal(transacao.substring(219, 234))
+//      pagamento.setNumeroValorDesconto(null)
+//
+//      pagamento.setNumeroValorMulta(null)
       pagamento.setFatorVencimento(transacao.substring(190, 194))
       pagamento.setCamara( transacao.substring(472, 476) )
       pagamento.setInfo01( transacao.substring(289, 291) )
       pagamento.setInfo02( transacao.substring(415, 442) )
 
-      //System.out.println(transacao.substring(265, 269));
-      //System.out.print(transacao.substring(269, 271));
-      //System.out.print(transacao.substring(271, 273));
-
       pagamento.setDataPagamento(
-        getXMLGregorianCalendar(
+        getXMLCalendar(
           year = transacao.substring(265, 269),
           month = transacao.substring(269, 271),
           day = transacao.substring(271, 273)
-        ).orNull
+        )
       )
 
-
-      pagamento.setDataVencimento(
-        getXMLGregorianCalendar(
-          year = transacao.substring(165, 169),
-          month = transacao.substring(169, 171),
-          day = transacao.substring(171, 173)
-        ).orNull
-      )
+//
+//      pagamento.setDataVencimento(
+//        getXMLGregorianCalendar(
+//          year = transacao.substring(165, 169),
+//          month = transacao.substring(169, 171),
+//          day = transacao.substring(171, 173)
+//        ).orNull
+//      )
 
 
       pagamento.setQtdParcelas(0)
